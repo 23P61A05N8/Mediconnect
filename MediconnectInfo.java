@@ -1,6 +1,4 @@
-public class MediconnectInfo {
-
-```
+public class MediconnectInfo{
 public static void main(String[] args) {
 
     System.out.println("===== MEDICONNECT PROJECT INFORMATION =====\n");
