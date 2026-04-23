@@ -27,12 +27,20 @@ $initials = strtoupper(substr($doctor['first_name'], 0, 1) . substr($doctor['las
 
 // Get today's appointments
 $today = date('Y-m-d');
-$appointments_query = "SELECT a.*, p.first_name, p.last_name, p.phone 
+$appointments_query = "SELECT a.*, p.first_name, p.last_name, p.phone, p.email, p.dob, p.blood_group, p.address, p.allergies, p.current_medications
                       FROM appointments a 
                       LEFT JOIN patients p ON a.patient_id = p.id 
                       WHERE a.doctor_id = '$doctor_id' AND a.appointment_date = '$today' 
                       ORDER BY a.appointment_time";
 $appointments_result = mysqli_query($con, $appointments_query);
+
+// Get all patients (distinct) for the view patient feature
+$all_patients_query = "SELECT DISTINCT p.id, p.first_name, p.last_name, p.email, p.phone, p.dob 
+                       FROM patients p 
+                       INNER JOIN appointments a ON p.id = a.patient_id 
+                       WHERE a.doctor_id = '$doctor_id' 
+                       ORDER BY p.first_name";
+$all_patients_result = mysqli_query($con, $all_patients_query);
 
 // Get total patients
 $patients_query = "SELECT COUNT(DISTINCT patient_id) as total_patients FROM appointments WHERE doctor_id = '$doctor_id'";
@@ -48,6 +56,27 @@ $pending_appointments = mysqli_fetch_assoc($pending_result)['pending'];
 $completed_query = "SELECT COUNT(*) as completed FROM appointments WHERE doctor_id = '$doctor_id' AND status = 'completed'";
 $completed_result = mysqli_query($con, $completed_query);
 $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
+
+// Handle patient view request
+$view_patient_id = isset($_GET['view_patient']) ? $_GET['view_patient'] : null;
+$patient_data = null;
+$patient_documents = null;
+$patient_appointments = null;
+
+if ($view_patient_id) {
+    // Get patient details
+    $patient_query = "SELECT * FROM patients WHERE id = '$view_patient_id'";
+    $patient_result = mysqli_query($con, $patient_query);
+    $patient_data = mysqli_fetch_assoc($patient_result);
+    
+    // Get patient documents
+    $documents_query = "SELECT * FROM patient_documents WHERE patient_id = '$view_patient_id' ORDER BY uploaded_at DESC";
+    $patient_documents = mysqli_query($con, $documents_query);
+    
+    // Get patient appointments with this doctor
+    $appointments_history_query = "SELECT * FROM appointments WHERE patient_id = '$view_patient_id' AND doctor_id = '$doctor_id' ORDER BY appointment_date DESC, appointment_time DESC";
+    $patient_appointments = mysqli_query($con, $appointments_history_query);
+}
 ?>
 
 <!DOCTYPE html>
@@ -59,7 +88,6 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* All the CSS styles from the previous enhanced version remain the same */
         :root {
             --sidebar-width: 280px;
             --header-height: 70px;
@@ -93,7 +121,7 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             min-height: 100vh;
         }
         
-        /* Enhanced Sidebar */
+        /* Sidebar */
         .sidebar {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -140,22 +168,7 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             transition: all 0.3s ease;
             font-weight: 500;
             position: relative;
-            overflow: hidden;
-        }
-        
-        .nav-link::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(25, 118, 210, 0.1), transparent);
-            transition: left 0.5s;
-        }
-        
-        .nav-link:hover::before {
-            left: 100%;
+            cursor: pointer;
         }
         
         .nav-link:hover, .nav-link.active {
@@ -175,7 +188,7 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             padding-bottom: 2rem;
         }
         
-        /* Enhanced Header */
+        /* Header */
         .header {
             height: var(--header-height);
             background: rgba(255, 255, 255, 0.95);
@@ -272,11 +285,6 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             color: var(--primary);
         }
         
-        .dropdown-item i {
-            width: 20px;
-            text-align: center;
-        }
-        
         .content {
             padding: 2rem;
         }
@@ -291,11 +299,7 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             gap: 0.5rem;
         }
         
-        .section-title i {
-            font-size: 1.5rem;
-        }
-        
-        /* Enhanced Welcome Section */
+        /* Welcome Section */
         .welcome-section {
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
@@ -307,37 +311,13 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             box-shadow: 0 8px 30px rgba(25, 118, 210, 0.3);
         }
         
-        .welcome-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100" fill="%23ffffff"><path d="M0 30 Q250 70 500 30 T1000 30 V100 H0 Z"/></svg>');
-            background-size: cover;
-            background-position: center bottom;
-            opacity: 0.1;
-        }
-        
-        .welcome-section > * {
-            position: relative;
-            z-index: 1;
-        }
-        
         .welcome-section h1 {
             font-size: 2.25rem;
             margin-bottom: 0.5rem;
             font-weight: 700;
         }
         
-        .welcome-section p {
-            opacity: 0.9;
-            font-size: 1.2rem;
-            font-weight: 500;
-        }
-        
-        /* Enhanced Stats Grid */
+        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -351,31 +331,12 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             border-radius: 16px;
             padding: 2rem;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            border: 1px solid rgba(255, 255, 255, 0.3);
             border-left: 4px solid var(--primary);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(25, 118, 210, 0.05), transparent);
-            transition: left 0.5s;
-        }
-        
-        .stat-card:hover::before {
-            left: 100%;
+            transition: transform 0.3s ease;
         }
         
         .stat-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
         }
         
         .stat-card h3 {
@@ -384,50 +345,36 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             margin-bottom: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            font-weight: 600;
         }
         
         .stat-card p {
             font-size: 2.25rem;
             font-weight: 700;
             color: var(--primary);
-            margin: 0;
         }
         
-        /* Enhanced Appointments Table */
-        .appointments-table {
+        /* Tables */
+        .appointments-table, .patients-table, .documents-table {
             width: 100%;
             border-collapse: collapse;
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
             border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            border: 1px solid rgba(255, 255, 255, 0.3);
         }
         
-        .appointments-table th, 
-        .appointments-table td {
-            padding: 1.25rem;
+        .appointments-table th, .appointments-table td,
+        .patients-table th, .patients-table td,
+        .documents-table th, .documents-table td {
+            padding: 1rem;
             text-align: left;
             border-bottom: 1px solid rgba(25, 118, 210, 0.1);
         }
         
-        .appointments-table th {
+        .appointments-table th, .patients-table th, .documents-table th {
             background: linear-gradient(135deg, rgba(25, 118, 210, 0.1), rgba(66, 165, 245, 0.05));
             font-weight: 600;
             color: var(--primary);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .appointments-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .appointments-table tr:hover td {
-            background: rgba(25, 118, 210, 0.03);
         }
         
         .badge {
@@ -436,64 +383,30 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             border-radius: 20px;
             font-size: 0.75rem;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
         
-        .badge-success {
-            background: linear-gradient(135deg, #dcfce7, #bbf7d0);
-            color: var(--success);
-        }
-        
-        .badge-warning {
-            background: linear-gradient(135deg, #ffedd5, #fed7aa);
-            color: var(--warning);
-        }
-        
-        .badge-error {
-            background: linear-gradient(135deg, #fee2e2, #fecaca);
-            color: var(--error);
-        }
+        .badge-success { background: #dcfce7; color: var(--success); }
+        .badge-warning { background: #ffedd5; color: var(--warning); }
         
         .btn {
-            padding: 0.75rem 1.5rem;
+            padding: 0.5rem 1rem;
             border: none;
-            border-radius: 12px;
+            border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
-            transition: all 0.3s ease;
-            font-size: 0.9rem;
-            position: relative;
-            overflow: hidden;
             text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-        
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-            transition: left 0.5s;
-        }
-        
-        .btn:hover::before {
-            left: 100%;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
         .btn-primary {
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
-            box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
         }
         
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(25, 118, 210, 0.4);
         }
         
         .btn-outline {
@@ -502,130 +415,160 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             color: var(--primary);
         }
         
-        .btn-outline:hover {
-            background: var(--primary);
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+        
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 0;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            animation: slideDown 0.3s;
+        }
+        
+        .modal-header {
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 16px 16px 0 0;
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+        }
+        
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--gray);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+        
+        .close {
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
             color: white;
         }
         
-        .dropdown-divider {
-            height: 1px;
-            background: rgba(25, 118, 210, 0.1);
-            margin: 0.5rem 0;
+        .close:hover {
+            opacity: 0.8;
         }
         
-        .empty-state {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 3rem 2rem;
-            border-radius: 16px;
-            text-align: center;
-            color: #6b7280;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        }
-        
-        .empty-state i {
-            font-size: 3rem;
-            color: var(--primary);
+        .form-group {
             margin-bottom: 1rem;
-            opacity: 0.5;
         }
         
-        .empty-state h3 {
-            color: var(--primary);
+        .form-group label {
+            display: block;
             margin-bottom: 0.5rem;
+            font-weight: 600;
         }
         
-        /* Background Animation */
-        .bg-animation {
-            position: fixed;
-            top: 0;
-            left: 0;
+        .form-control {
             width: 100%;
-            height: 100%;
-            z-index: -1;
-            overflow: hidden;
+            padding: 0.75rem;
+            border: 1px solid var(--gray);
+            border-radius: 8px;
         }
         
-        .floating-shape {
-            position: absolute;
+        .patient-dashboard {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        
+        .info-group label {
+            font-size: 0.75rem;
+            color: #6b7280;
+            display: block;
+        }
+        
+        .info-group p {
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+        
+        .document-icon {
+            width: 40px;
+            height: 40px;
             background: rgba(25, 118, 210, 0.1);
-            border-radius: 50%;
-            animation: float 6s ease-in-out infinite;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        @keyframes float {
-            0% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(10deg); }
-            100% { transform: translateY(0px) rotate(0deg); }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
             }
-            
             .sidebar {
-                height: auto;
-                position: static;
+                display: none;
             }
-            
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-            
             .content {
                 padding: 1rem;
-            }
-            
-            .welcome-section {
-                padding: 2rem 1.5rem;
-            }
-            
-            .welcome-section h1 {
-                font-size: 1.75rem;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Animated Background -->
-    <div class="bg-animation">
-        <div class="floating-shape" style="width: 80px; height: 80px; top: 10%; left: 10%; animation-delay: 0s;"></div>
-        <div class="floating-shape" style="width: 120px; height: 120px; top: 60%; right: 10%; animation-delay: 2s;"></div>
-        <div class="floating-shape" style="width: 60px; height: 60px; bottom: 20%; left: 20%; animation-delay: 4s;"></div>
-        <div class="floating-shape" style="width: 100px; height: 100px; top: 30%; right: 20%; animation-delay: 1s;"></div>
-    </div>
-
     <div class="dashboard">
-        <!-- Enhanced Sidebar Navigation -->
+        <!-- Sidebar Navigation -->
         <div class="sidebar">
             <div class="sidebar-header">
                 <h2>MediConnect</h2>
-                <p style="color: var(--primary); font-weight: 600; margin-top: 0.5rem; font-size: 0.9rem;">Doctor Portal</p>
+                <p style="color: var(--primary); font-weight: 600; margin-top: 0.5rem;">Doctor Portal</p>
             </div>
             <nav class="sidebar-nav">
                 <div class="nav-item">
-                    <a href="doctordashboard.php" class="nav-link active">
+                    <a href="doctordashboard.php" class="nav-link <?php echo !$view_patient_id ? 'active' : ''; ?>">
                         <i class="fas fa-chart-line"></i> Dashboard
                     </a>
                 </div>
+                <div class="nav-item">
+    <a href="#" class="nav-link" onclick="openPatientModal(); return false;">
+        <i class="fas fa-user-injured"></i> View Patients
+    </a>
+</div>
                 <div class="nav-item">
                     <a href="appointments.php" class="nav-link">
                         <i class="fas fa-calendar-check"></i> Appointments
                     </a>
                 </div>
                 <div class="nav-item">
-                    <a href="patients.php" class="nav-link">
-                        <i class="fas fa-user-injured"></i> Patients
-                    </a>
-                </div>
-                <div class="nav-item">
                     <a href="dprescriptions.php" class="nav-link">
                         <i class="fas fa-prescription"></i> Prescriptions
-                    </a>
-                </div>
-                <div class="nav-item">
-                    <a href="dschedule.php" class="nav-link">
-                        <i class="fas fa-clock"></i> Schedule
                     </a>
                 </div>
                 <div class="nav-item">
@@ -636,44 +579,186 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
             </nav>
         </div>
         
-        <!-- Main Content Area -->
+        <!-- Main Content -->
         <div class="main-content">
             <header class="header">
-                <div class="header-title">Doctor Dashboard</div>
-                <div class="profile-dropdown">
-                    <button class="profile-btn">
-                        <div class="profile-img"><?php echo $initials; ?></div>
-                        <span style="font-weight: 600;">Dr. <?php echo htmlspecialchars($full_name); ?></span>
-                        <i class="fas fa-chevron-down" style="font-size: 0.8rem;"></i>
-                    </button>
-                    <div class="dropdown-menu">
-                        <a href="profile.php" class="dropdown-item">
-                            <i class="fas fa-user"></i> My Profile
-                        </a>
-                        <a href="dsettings.php" class="dropdown-item">
-                            <i class="fas fa-cog"></i> Settings
-                        </a>
-                        <a href="davailability.php" class="dropdown-item">
-                            <i class="fas fa-calendar-alt"></i> Availability
-                        </a>
-                        <div class="dropdown-divider"></div>
-                        <a href="logout.php" class="dropdown-item">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </a>
-                    </div>
-                </div>
-            </header>
+    <div class="header-title">
+        <i class="fas fa-stethoscope"></i> Doctor Dashboard
+    </div>
+    <div class="profile-dropdown">
+        <button class="profile-btn" id="profileBtn">
+            <div class="profile-img"><?php echo $initials; ?></div>
+            <span class="profile-name">Dr. <?php echo htmlspecialchars($full_name); ?></span>
+            <i class="fas fa-chevron-down dropdown-icon"></i>
+        </button>
+        <div class="dropdown-menu" id="dropdownMenu">
+            <a href="dprofile.php" class="dropdown-item">
+                <i class="fas fa-user-circle"></i> My Profile
+            </a>
+            <a href="dsettings.php" class="dropdown-item">
+                <i class="fas fa-sliders-h"></i> Settings
+            </a>
+            <a href="davailability.php" class="dropdown-item">
+                <i class="fas fa-clock"></i> Availability
+            </a>
+            <div class="dropdown-divider"></div>
+            <a href="logout.php" class="dropdown-item logout-item">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+</header>
             
             <div class="content">
-                <!-- Enhanced Welcome Section -->
-                <div class="welcome-section">
-                    <h1>Welcome, Dr. <?php echo htmlspecialchars($full_name); ?>!</h1>
-                    <p><i class="fas fa-stethoscope"></i> <?php echo htmlspecialchars($doctor['specialization']); ?> • <i class="fas fa-hospital"></i> <?php echo htmlspecialchars($doctor['hospital'] ?: 'MediConnect Hospital'); ?></p>
-                </div>
-                
-                <!-- Dashboard Overview -->
-                <div id="dashboard">
-                    <h2 class="section-title"><i class="fas fa-chart-line"></i> Today's Overview</h2>
+                <?php if ($view_patient_id && $patient_data): ?>
+                    <!-- Patient Complete Dashboard -->
+                    <div class="welcome-section" style="background: linear-gradient(135deg, #2ecc71, #27ae60);">
+                        <h1><i class="fas fa-user-injured"></i> <?php echo htmlspecialchars($patient_data['first_name'] . ' ' . $patient_data['last_name']); ?></h1>
+                        <p>Patient ID: <?php echo $patient_data['id']; ?> • Registered: <?php echo date('d M Y', strtotime($patient_data['created_at'])); ?></p>
+                    </div>
+                    
+                    <!-- Personal Information -->
+                    <div class="patient-dashboard">
+                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
+                            <i class="fas fa-user-circle"></i> Personal Information
+                        </h3>
+                        <div class="info-grid">
+                            <div class="info-group">
+                                <label>Full Name</label>
+                                <p><?php echo htmlspecialchars($patient_data['first_name'] . ' ' . $patient_data['last_name']); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Email</label>
+                                <p><?php echo htmlspecialchars($patient_data['email']); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Phone</label>
+                                <p><?php echo htmlspecialchars($patient_data['phone']); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Date of Birth</label>
+                                <p><?php echo htmlspecialchars($patient_data['dob']); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Gender</label>
+                                <p><?php echo ucfirst(htmlspecialchars($patient_data['gender'])); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Blood Group</label>
+                                <p><?php echo htmlspecialchars($patient_data['blood_group'] ?: 'Not specified'); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Address</label>
+                                <p><?php echo htmlspecialchars($patient_data['address']); ?></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Medical History -->
+                    <div class="patient-dashboard">
+                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
+                            <i class="fas fa-notes-medical"></i> Medical History
+                        </h3>
+                        <div class="info-grid">
+                            <div class="info-group">
+                                <label>Allergies</label>
+                                <p><?php echo htmlspecialchars($patient_data['allergies'] ?: 'None reported'); ?></p>
+                            </div>
+                            <div class="info-group">
+                                <label>Current Medications</label>
+                                <p><?php echo htmlspecialchars($patient_data['current_medications'] ?: 'None'); ?></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Documents/Reports -->
+                    <div class="patient-dashboard">
+                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
+                            <i class="fas fa-file-medical"></i> Medical Reports & Documents
+                        </h3>
+                        <?php if ($patient_documents && mysqli_num_rows($patient_documents) > 0): ?>
+                            <table class="documents-table">
+                                <thead>
+                                    <tr>
+                                        <th>Document Name</th>
+                                        <th>Category</th>
+                                        <th>Uploaded Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while($doc = mysqli_fetch_assoc($patient_documents)): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($doc['document_name']); ?></td>
+                                            <td>
+                                                <span class="badge badge-success">
+                                                    <?php echo ucfirst(htmlspecialchars($doc['document_category'])); ?>
+                                                </span>
+                                            </td>
+                                            <td><?php echo date('d M Y', strtotime($doc['uploaded_at'])); ?></td>
+                                            <td>
+                                                <a href="<?php echo $doc['file_path']; ?>" target="_blank" class="btn btn-outline" style="padding: 0.25rem 0.75rem;">
+                                                    <i class="fas fa-eye"></i> View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <p style="text-align: center; padding: 2rem; color: #6b7280;">
+                                <i class="fas fa-folder-open"></i> No documents uploaded yet
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <!-- Appointment History -->
+                    <div class="patient-dashboard">
+                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
+                            <i class="fas fa-calendar-alt"></i> Appointment History
+                        </h3>
+                        <?php if ($patient_appointments && mysqli_num_rows($patient_appointments) > 0): ?>
+                            <table class="appointments-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Time</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while($apt = mysqli_fetch_assoc($patient_appointments)): ?>
+                                        <tr>
+                                            <td><?php echo date('d M Y', strtotime($apt['appointment_date'])); ?></td>
+                                            <td><?php echo date('h:i A', strtotime($apt['appointment_time'])); ?></td>
+                                            <td><?php echo htmlspecialchars($apt['reason']); ?></td>
+                                            <td>
+                                                <span class="badge <?php echo $apt['status'] == 'completed' ? 'badge-success' : 'badge-warning'; ?>">
+                                                    <?php echo ucfirst($apt['status']); ?>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <p>No appointment history found.</p>
+                        <?php endif; ?>
+                        
+                        <div style="margin-top: 1rem;">
+                            <a href="doctordashboard.php" class="btn btn-primary">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </a>
+                        </div>
+                    </div>
+                    
+                <?php else: ?>
+                    <!-- Regular Dashboard View -->
+                    <div class="welcome-section">
+                        <h1>Welcome, Dr. <?php echo htmlspecialchars($full_name); ?>!</h1>
+                        <p><i class="fas fa-stethoscope"></i> <?php echo htmlspecialchars($doctor['specialization']); ?> • <i class="fas fa-hospital"></i> MediConnect Hospital</p>
+                    </div>
                     
                     <div class="stats-grid">
                         <div class="stat-card">
@@ -689,7 +774,7 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
                             <p><?php echo $pending_appointments; ?></p>
                         </div>
                         <div class="stat-card">
-                            <h3>Completed Appointments</h3>
+                            <h3>Completed</h3>
                             <p><?php echo $completed_appointments; ?></p>
                         </div>
                     </div>
@@ -698,40 +783,18 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
                     <?php if (mysqli_num_rows($appointments_result) > 0): ?>
                         <table class="appointments-table">
                             <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Patient Name</th>
-                                    <th>Contact</th>
-                                    <th>Reason</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
+                                <tr><th>Time</th><th>Patient</th><th>Contact</th><th>Status</th><th>Action</th></tr>
                             </thead>
                             <tbody>
-                                <?php while($appointment = mysqli_fetch_assoc($appointments_result)): ?>
+                                <?php while($apt = mysqli_fetch_assoc($appointments_result)): ?>
                                     <tr>
-                                        <td style="font-weight: 600; color: var(--primary);">
-                                            <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>
-                                            <?php echo date('h:i A', strtotime($appointment['appointment_time'])); ?>
-                                        </td>
-                                        <td style="font-weight: 500;">
-                                            <?php echo htmlspecialchars($appointment['first_name'] . ' ' . $appointment['last_name']); ?>
-                                        </td>
+                                        <td><?php echo date('h:i A', strtotime($apt['appointment_time'])); ?></td>
+                                        <td><?php echo htmlspecialchars($apt['first_name'] . ' ' . $apt['last_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($apt['phone']); ?></td>
+                                        <td><span class="badge badge-warning">Scheduled</span></td>
                                         <td>
-                                            <i class="fas fa-phone" style="margin-right: 0.5rem; color: var(--primary);"></i>
-                                            <?php echo htmlspecialchars($appointment['phone']); ?>
-                                        </td>
-                                        <td><?php echo htmlspecialchars($appointment['reason']); ?></td>
-                                        <td>
-                                            <span class="badge badge-warning">
-                                                <i class="fas fa-clock" style="margin-right: 0.25rem;"></i>
-                                                Scheduled
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <a href="dconsultation.php?appointment_id=<?php echo $appointment['id']; ?>" class="btn btn-primary">
-                                                <i class="fas fa-play" style="margin-right: 0.5rem;"></i>
-                                                Start Consultation
+                                            <a href="?view_patient=<?php echo $apt['patient_id']; ?>" class="btn btn-primary" style="padding: 0.25rem 0.75rem;">
+                                                <i class="fas fa-eye"></i> View
                                             </a>
                                         </td>
                                     </tr>
@@ -739,59 +802,151 @@ $completed_appointments = mysqli_fetch_assoc($completed_result)['completed'];
                             </tbody>
                         </table>
                     <?php else: ?>
-                        <div class="empty-state">
-                            <i class="fas fa-calendar-times"></i>
-                            <h3>No Appointments Today</h3>
-                            <p>You have no scheduled appointments for today. Enjoy your day!</p>
-                            <a href="dschedule.php" class="btn btn-primary" style="margin-top: 1rem;">
-                                <i class="fas fa-calendar-plus"></i> Manage Schedule
-                            </a>
+                        <div class="patient-dashboard" style="text-align: center;">
+                            <i class="fas fa-calendar-times" style="font-size: 3rem; color: var(--primary); opacity: 0.5;"></i>
+                            <p>No appointments scheduled for today.</p>
                         </div>
                     <?php endif; ?>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
-
+    
+    <!-- Patient Login Modal -->
+   <!-- Patient Login Modal -->
+<div id="patientModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-user-injured"></i> View Patient Records</h2>
+            <p>Enter patient credentials to access medical records</p>
+        </div>
+        <div class="modal-body">
+            <form id="patientLoginForm">
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Patient Name</label>
+                    <input type="text" id="patient_name" class="form-control" placeholder="Enter patient's full name" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-calendar"></i> Date of Birth</label>
+                    <input type="password" id="patient_password" class="form-control" placeholder="YYYY-MM-DD" required>
+                    <small>Format: YYYY-MM-DD</small>
+                </div>
+                <div id="loginError" style="color: #dc2626; display: none; margin-top: 0.5rem; font-size: 0.875rem;"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="validatePatient()">View Records</button>
+        </div>
+    </div>
+</div>
+    
     <script>
-        // Profile dropdown toggle
-        const profileBtn = document.querySelector('.profile-btn');
-        const dropdownMenu = document.querySelector('.dropdown-menu');
-        
-        profileBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            dropdownMenu.classList.toggle('show');
-        });
-        
-        // Close dropdown when clicking outside
-        window.addEventListener('click', function() {
-            dropdownMenu.classList.remove('show');
-        });
-        
-        // Prevent dropdown from closing when clicking inside
-        dropdownMenu.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
+        // Profile dropdown
+        // Modal functions for patient name
+// Modal functions for patient name
+const modal = document.getElementById('patientModal');
 
-        // Add animation to stat cards when they come into view
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
+function openPatientModal() {
+    modal.style.display = 'block';
+    document.getElementById('patient_name').value = '';
+    document.getElementById('patient_password').value = '';
+    document.getElementById('loginError').style.display = 'none';
+}
 
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.animation = 'fadeInUp 0.6s ease-out forwards';
-                }
-            });
-        }, observerOptions);
+function closeModal() {
+    modal.style.display = 'none';
+}
 
-        // Observe all stat cards
-        document.querySelectorAll('.stat-card').forEach(card => {
-            card.style.opacity = '0';
-            observer.observe(card);
-        });
+if (document.querySelector('.close')) {
+    document.querySelector('.close').onclick = closeModal;
+}
+
+window.onclick = function(event) {
+    if (event.target == modal) {
+        closeModal();
+    }
+}
+
+function validatePatient() {
+    const patientName = document.getElementById('patient_name').value.trim();
+    const password = document.getElementById('patient_password').value.trim();
+    const errorDiv = document.getElementById('loginError');
+    
+    if (!patientName || !password) {
+        errorDiv.innerHTML = 'Please enter both Patient Name and Date of Birth';
+        errorDiv.style.display = 'block';
+        return;
+    }
+    
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(password)) {
+        errorDiv.innerHTML = 'Please enter Date of Birth in YYYY-MM-DD format';
+        errorDiv.style.display = 'block';
+        return;
+    }
+    
+    errorDiv.style.display = 'none';
+    errorDiv.innerHTML = '';
+    
+    // Show loading state
+    const viewBtn = document.querySelector('#patientModal .btn-primary');
+    const originalText = viewBtn.innerHTML;
+    viewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+    viewBtn.disabled = true;
+    
+    // Send AJAX request to validate patient
+    fetch('validate_patient.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'patient_name=' + encodeURIComponent(patientName) + '&password=' + encodeURIComponent(password)
+    })
+    .then(response => response.json())
+    .then(data => {
+        viewBtn.innerHTML = originalText;
+        viewBtn.disabled = false;
+        
+        if (data.success) {
+            // Redirect to view patient dashboard
+            window.location.href = 'doctordashboard.php?view_patient=' + data.patient_id;
+        } else {
+            errorDiv.innerHTML = data.message;
+            errorDiv.style.display = 'block';
+        }
+    })
+    .catch(error => {
+        viewBtn.innerHTML = originalText;
+        viewBtn.disabled = false;
+        errorDiv.innerHTML = 'Unable to verify. Please try again.';
+        errorDiv.style.display = 'block';
+    });
+}
+
+// Enter key press in modal
+document.getElementById('patient_password').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        validatePatient();
+    }
+});
+   // Profile dropdown functionality
+const profileBtn = document.getElementById('profileBtn');
+const dropdownMenu = document.getElementById('dropdownMenu');
+
+profileBtn.addEventListener('click', function (e) {
+    e.stopPropagation(); // prevent bubbling
+    dropdownMenu.classList.toggle('show');
+});
+
+// Close dropdown when clicking outside
+window.addEventListener('click', function (e) {
+    if (!profileBtn.contains(e.target)) {
+        dropdownMenu.classList.remove('show');
+    }
+});
     </script>
 </body>
 </html>

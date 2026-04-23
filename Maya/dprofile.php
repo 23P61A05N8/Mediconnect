@@ -463,14 +463,14 @@ unset($_SESSION['error']);
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <a href="dashboard.php" class="logo">
+            <a href="doctordashboard.php" class="logo">
                 <div class="logo-icon">
                     <i class="fas fa-heartbeat"></i>
                 </div>
                 <div class="logo-text">Medi<span>Connect</span></div>
             </a>
             <div class="nav-links">
-                <a href="dashboard.php">
+                <a href="doctordashboard.php">
                     <i class="fas fa-tachometer-alt"></i>
                     <span>Dashboard</span>
                 </a>

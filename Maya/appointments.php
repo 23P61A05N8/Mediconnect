@@ -23,12 +23,67 @@ $doctor = mysqli_fetch_assoc($doctor_result);
 $full_name = $doctor['first_name'] . ' ' . $doctor['last_name'];
 $initials = strtoupper(substr($doctor['first_name'], 0, 1) . substr($doctor['last_name'], 0, 1));
 
+// Insert sample future appointments if they don't exist
+$check_future = mysqli_query($con, "SELECT COUNT(*) as count FROM appointments WHERE doctor_id = '$doctor_id' AND appointment_date > CURDATE()");
+$future_count = mysqli_fetch_assoc($check_future)['count'];
+
+if ($future_count < 8) {
+    // Get existing patient IDs
+    $patients_query = "SELECT id FROM patients LIMIT 4";
+    $patients_result = mysqli_query($con, $patients_query);
+    $patient_ids = [];
+    while($row = mysqli_fetch_assoc($patients_result)) {
+        $patient_ids[] = $row['id'];
+    }
+    
+    // Sample data for future appointments
+    $future_dates = [
+        date('Y-m-d', strtotime('+1 day')),
+        date('Y-m-d', strtotime('+2 days')),
+        date('Y-m-d', strtotime('+3 days')),
+        date('Y-m-d', strtotime('+4 days')),
+        date('Y-m-d', strtotime('+5 days')),
+        date('Y-m-d', strtotime('+6 days')),
+        date('Y-m-d', strtotime('+7 days')),
+        date('Y-m-d', strtotime('+8 days'))
+    ];
+    
+    $times = ['09:00:00', '10:30:00', '11:00:00', '14:00:00', '15:30:00', '16:00:00'];
+    $reasons = [
+        'Regular Checkup',
+        'Fever and Cold',
+        'Blood Pressure Check',
+        'Diabetes Follow-up',
+        'Annual Health Screening',
+        'Vaccination',
+        'Consultation for Back Pain',
+        'Follow-up for Lab Results'
+    ];
+    
+    for ($i = 0; $i < 8; $i++) {
+        $patient_id = $patient_ids[array_rand($patient_ids)];
+        $appointment_date = $future_dates[$i];
+        $appointment_time = $times[array_rand($times)];
+        $reason = $reasons[array_rand($reasons)];
+        
+        // Check if appointment already exists for this date and time
+        $check_query = "SELECT id FROM appointments WHERE doctor_id = '$doctor_id' AND appointment_date = '$appointment_date' AND appointment_time = '$appointment_time'";
+        $check_result = mysqli_query($con, $check_query);
+        
+        if (mysqli_num_rows($check_result) == 0) {
+            $insert_query = "INSERT INTO appointments (doctor_id, patient_id, appointment_date, appointment_time, reason, status, created_at) 
+                             VALUES ('$doctor_id', '$patient_id', '$appointment_date', '$appointment_time', '$reason', 'scheduled', NOW())";
+            mysqli_query($con, $insert_query);
+        }
+    }
+}
+
 // Get all appointments
 $appointments_query = "SELECT a.*, p.first_name, p.last_name, p.phone, p.email 
                       FROM appointments a 
                       LEFT JOIN patients p ON a.patient_id = p.id 
                       WHERE a.doctor_id = '$doctor_id' 
-                      ORDER BY a.appointment_date DESC, a.appointment_time DESC";
+                      ORDER BY a.appointment_date ASC, a.appointment_time ASC";
 $appointments_result = mysqli_query($con, $appointments_query);
 
 // Get appointment statistics
@@ -40,6 +95,15 @@ $today_appointments = mysqli_fetch_assoc($today_result)['today_count'];
 $upcoming_query = "SELECT COUNT(*) as upcoming_count FROM appointments WHERE doctor_id = '$doctor_id' AND appointment_date > '$today' AND status = 'scheduled'";
 $upcoming_result = mysqli_query($con, $upcoming_query);
 $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
+
+$pending_query = "SELECT COUNT(*) as pending_count FROM appointments WHERE doctor_id = '$doctor_id' AND status = 'scheduled'";
+$pending_result = mysqli_query($con, $pending_query);
+$pending_appointments = mysqli_fetch_assoc($pending_result)['pending_count'];
+
+// Get completed appointments count
+$completed_query = "SELECT COUNT(*) as completed_count FROM appointments WHERE doctor_id = '$doctor_id' AND status = 'completed'";
+$completed_result = mysqli_query($con, $completed_query);
+$completed_appointments = mysqli_fetch_assoc($completed_result)['completed_count'];
 ?>
 
 <!DOCTYPE html>
@@ -67,7 +131,7 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 0 20px;
         }
@@ -188,7 +252,7 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
         /* Enhanced Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 1.5rem;
             margin-bottom: 3rem;
         }
@@ -318,34 +382,19 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
 
         /* Enhanced Buttons */
         .btn {
-            padding: 0.75rem 1.5rem;
+            padding: 0.6rem 1.2rem;
             border: none;
-            border-radius: 12px;
+            border-radius: 10px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s ease;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             position: relative;
             overflow: hidden;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-        }
-
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-            transition: left 0.5s;
-        }
-
-        .btn:hover::before {
-            left: 100%;
         }
 
         .btn-primary {
@@ -370,7 +419,7 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
             color: white;
         }
 
-        /* Enhanced Empty State */
+        /* Empty State */
         .empty-state {
             background: rgba(255, 255, 255, 0.8);
             padding: 3rem 2rem;
@@ -405,7 +454,7 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
             }
         }
 
-        /* Enhanced Background Animation */
+        /* Background Animation */
         .bg-animation {
             position: fixed;
             top: 0;
@@ -521,7 +570,7 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
                 <ul class="nav-menu">
                     <li><a href="doctordashboard.php" class="nav-link">Dashboard</a></li>
                     <li><a href="appointments.php" class="nav-link active">Appointments</a></li>
-                    <li><a href="patients.php" class="nav-link">Patients</a></li>
+                    <li><a href="doctordashboard.php" class="nav-link">Patients</a></li>
                     <li><a href="dprofile.php" class="nav-link">Profile</a></li>
                     <li><a href="logout.php" class="nav-link btn-primary">Logout</a></li>
                 </ul>
@@ -551,14 +600,19 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
                     <p><?php echo $upcoming_appointments; ?></p>
                 </div>
                 <div class="stat-card">
+                    <i class="fas fa-clock"></i>
+                    <h3>Pending Appointments</h3>
+                    <p><?php echo $pending_appointments; ?></p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-check-circle"></i>
+                    <h3>Completed</h3>
+                    <p><?php echo $completed_appointments; ?></p>
+                </div>
+                <div class="stat-card">
                     <i class="fas fa-users"></i>
                     <h3>Total Appointments</h3>
                     <p><?php echo mysqli_num_rows($appointments_result); ?></p>
-                </div>
-                <div class="stat-card">
-                    <i class="fas fa-clock"></i>
-                    <h3>Pending Actions</h3>
-                    <p><?php echo $upcoming_appointments; ?></p>
                 </div>
             </div>
 
@@ -582,6 +636,8 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
                         <?php while($appointment = mysqli_fetch_assoc($appointments_result)): 
                             $status_class = '';
                             $status_icon = '';
+                            $is_upcoming = strtotime($appointment['appointment_date']) > strtotime($today);
+                            
                             switch($appointment['status']) {
                                 case 'scheduled': 
                                     $status_class = 'badge-warning';
@@ -602,38 +658,43 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
                         ?>
                             <tr>
                                 <td style="font-weight: 600; color: #1976d2;">
-                                    <div><?php echo date('M j, Y', strtotime($appointment['appointment_date'])); ?></div>
-                                    <div style="font-size: 0.9rem; color: #666;">
+                                    <div><i class="fas fa-calendar-alt" style="margin-right: 0.5rem;"></i><?php echo date('M j, Y', strtotime($appointment['appointment_date'])); ?></div>
+                                    <div style="font-size: 0.9rem; color: #666; margin-top: 0.25rem;">
                                         <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>
                                         <?php echo date('h:i A', strtotime($appointment['appointment_time'])); ?>
                                     </div>
+                                    <?php if($is_upcoming && $appointment['status'] == 'scheduled'): ?>
+                                        <div style="font-size: 0.7rem; color: #ea580c; margin-top: 0.25rem;">
+                                            <i class="fas fa-hourglass-half"></i> Upcoming
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <div style="font-weight: 500;"><?php echo htmlspecialchars($appointment['first_name'] . ' ' . $appointment['last_name']); ?></div>
-                                    <div style="font-size: 0.9rem; color: #666;"><?php echo htmlspecialchars($appointment['email']); ?></div>
+                                    <div style="font-size: 0.85rem; color: #666;">ID: <?php echo $appointment['patient_id']; ?></div>
                                 </td>
                                 <td>
-                                    <i class="fas fa-phone" style="margin-right: 0.5rem; color: #1976d2;"></i>
-                                    <?php echo htmlspecialchars($appointment['phone']); ?>
-                                </td>
+                                    <div><i class="fas fa-phone" style="margin-right: 0.5rem; color: #1976d2;"></i><?php echo htmlspecialchars($appointment['phone']); ?></div>
+                                    <div style="font-size: 0.85rem; margin-top: 0.25rem;"><i class="fas fa-envelope" style="margin-right: 0.5rem; color: #1976d2;"></i><?php echo htmlspecialchars($appointment['email']); ?></div>
+                                 </td>
                                 <td><?php echo htmlspecialchars($appointment['reason']); ?></td>
                                 <td>
                                     <span class="badge <?php echo $status_class; ?>">
                                         <i class="<?php echo $status_icon; ?>"></i>
                                         <?php echo ucfirst($appointment['status']); ?>
                                     </span>
-                                </td>
+                                 </td>
                                 <td>
                                     <?php if ($appointment['status'] == 'scheduled'): ?>
                                         <a href="dconsultation.php?appointment_id=<?php echo $appointment['id']; ?>" class="btn btn-primary">
                                             <i class="fas fa-play"></i> Start
                                         </a>
                                     <?php else: ?>
-                                        <button class="btn btn-outline">
+                                        <button class="btn btn-outline" onclick="viewAppointment(<?php echo $appointment['id']; ?>)">
                                             <i class="fas fa-eye"></i> View
                                         </button>
                                     <?php endif; ?>
-                                </td>
+                                 </td>
                             </tr>
                         <?php endwhile; ?>
                     </tbody>
@@ -643,9 +704,6 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
                     <i class="fas fa-calendar-times"></i>
                     <h3>No Appointments Found</h3>
                     <p>You don't have any appointments scheduled yet.</p>
-                    <a href="dschedule.php" class="btn btn-primary" style="margin-top: 1rem;">
-                        <i class="fas fa-calendar-plus"></i> Manage Schedule
-                    </a>
                 </div>
             <?php endif; ?>
             
@@ -662,16 +720,24 @@ $upcoming_appointments = mysqli_fetch_assoc($upcoming_result)['upcoming_count'];
         const hamburger = document.querySelector(".hamburger");
         const navMenu = document.querySelector(".nav-menu");
 
-        hamburger.addEventListener("click", () => {
-            hamburger.classList.toggle("active");
-            navMenu.classList.toggle("active");
-        });
+        if (hamburger) {
+            hamburger.addEventListener("click", () => {
+                hamburger.classList.toggle("active");
+                navMenu.classList.toggle("active");
+            });
+        }
 
         // Close mobile menu when clicking on a link
         document.querySelectorAll(".nav-link").forEach(n => n.addEventListener("click", () => {
-            hamburger.classList.remove("active");
-            navMenu.classList.remove("active");
+            if (hamburger) {
+                hamburger.classList.remove("active");
+                navMenu.classList.remove("active");
+            }
         }));
+
+        function viewAppointment(id) {
+            alert('Appointment details will be shown here. ID: ' + id);
+        }
 
         // Add animation to elements when they come into view
         const observerOptions = {

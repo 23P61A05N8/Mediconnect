@@ -1,0 +1,935 @@
+<?php
+session_start();
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// Database configuration
+$host = "localhost";
+$username = "root";
+$password = "";
+$database = "mediconnect";
+
+// Create connection
+$con = mysqli_connect($host, $username, $password, $database);
+
+// Check connection
+if(mysqli_connect_errno()) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Get user data
+$user_id = $_SESSION['user_id'];
+$user_query = "SELECT * FROM patients WHERE id = '$user_id'";
+$user_result = mysqli_query($con, $user_query);
+
+if (!$user_result || mysqli_num_rows($user_result) == 0) {
+    // User not found, logout
+    session_destroy();
+    header("Location: login.php");
+    exit();
+}
+
+$user = mysqli_fetch_assoc($user_result);
+
+// Prepare user data for display
+$full_name = $user['first_name'] . ' ' . $user['last_name'];
+$initials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1));
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - MediConnect</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Internal CSS for dashboard.php - Enhanced with index.php styles */
+        
+        /* Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            color: #333;
+            line-height: 1.6;
+            background-color: #f8f9fa;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+        }
+        
+        .floating-shape {
+            position: absolute;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #bbdefb, #e3f2fd);
+            opacity: 0.1;
+            animation: float 20s infinite linear;
+        }
+        
+        .shape-1 {
+            width: 100px;
+            height: 100px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+        
+        .shape-2 {
+            width: 150px;
+            height: 150px;
+            top: 60%;
+            right: 10%;
+            animation-delay: -5s;
+        }
+        
+        .shape-3 {
+            width: 80px;
+            height: 80px;
+            bottom: 20%;
+            left: 20%;
+            animation-delay: -10s;
+        }
+        
+        .shape-4 {
+            width: 120px;
+            height: 120px;
+            top: 30%;
+            right: 20%;
+            animation-delay: -15s;
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            25% {
+                transform: translate(20px, 20px) rotate(90deg);
+            }
+            50% {
+                transform: translate(0, 40px) rotate(180deg);
+            }
+            75% {
+                transform: translate(-20px, 20px) rotate(270deg);
+            }
+        }
+        
+        /* Header Styles */
+        header {
+            background-color: #fff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            min-height: 60px;
+        }
+        
+        .nav-brand h2 {
+            color: #1976d2;
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        
+        .nav-menu {
+            display: flex;
+            list-style: none;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .nav-link {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            margin: 0 0.75rem;
+            transition: color 0.3s;
+            font-size: 0.9rem;
+            padding: 0.5rem 0;
+        }
+        
+        .nav-link:hover {
+            color: #1976d2;
+        }
+        
+        .nav-link.active {
+            color: #1976d2;
+        }
+        
+        .btn-primary {
+            background-color: #1976d2;
+            color: white;
+            padding: 0.4rem 1.2rem;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        .btn-primary:hover {
+            background-color: #1565c0;
+        }
+        
+        .hamburger {
+            display: none;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+        
+        .bar {
+            display: block;
+            width: 22px;
+            height: 2px;
+            margin: 4px auto;
+            transition: all 0.3s ease;
+            background-color: #333;
+        }
+        
+        /* Dashboard Layout */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: calc(100vh - 80px);
+            position: relative;
+            z-index: 2;
+        }
+        
+        .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            border-right: 1px solid #e0e0e0;
+            height: 100%;
+            position: sticky;
+            top: 0;
+            padding: 1rem 0;
+            backdrop-filter: blur(10px);
+        }
+        
+        .sidebar-header {
+            padding: 0 1.5rem 1.5rem;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 1rem;
+        }
+        
+        .sidebar-header h2 {
+            color: #1976d2;
+            font-weight: 700;
+        }
+        
+        .sidebar-nav {
+            padding: 0 1rem;
+        }
+        
+        .nav-item {
+            margin-bottom: 0.5rem;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .nav-link i {
+            margin-right: 0.75rem;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .main-content {
+            padding-bottom: 2rem;
+        }
+        
+        .header {
+            height: 60px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+        }
+        
+        .profile-dropdown {
+            position: relative;
+        }
+        
+        .profile-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 8px;
+            transition: background-color 0.3s;
+        }
+        
+        .profile-btn:hover {
+            background-color: #e3f2fd;
+        }
+        
+        .profile-img {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #1976d2, #0d47a1);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .dropdown-menu {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 0.5rem);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 200px;
+            padding: 0.5rem 0;
+            display: none;
+            z-index: 1000;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .dropdown-menu.show {
+            display: block;
+        }
+        
+        .dropdown-item {
+            padding: 0.75rem 1rem;
+            display: block;
+            text-decoration: none;
+            color: #333;
+            transition: background-color 0.3s;
+            font-weight: 500;
+        }
+        
+        .dropdown-item:hover {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .dropdown-divider {
+            height: 1px;
+            background-color: #e0e0e0;
+            margin: 0.5rem 0;
+        }
+        
+        .content {
+            padding: 2rem;
+        }
+        
+        .tab-content {
+            display: none;
+            animation: fadeInUp 0.5s ease-out;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .section-title {
+            margin-bottom: 1.5rem;
+            color: #1976d2;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+        
+        .stat-card h3 {
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card p {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1976d2;
+        }
+        
+        .appointments-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(10px);
+        }
+        
+        .appointments-table th, 
+        .appointments-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .appointments-table th {
+            background-color: #e3f2fd;
+            font-weight: 600;
+            color: #1976d2;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .badge-success {
+            background-color: #e8f5e8;
+            color: #388e3c;
+        }
+        
+        .badge-warning {
+            background-color: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .badge-error {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+        
+        .info-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .info-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .info-group {
+            margin-bottom: 1rem;
+        }
+
+        .info-group label {
+            font-size: 0.875rem;
+            color: #666;
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+
+        .info-group p {
+            font-weight: 500;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .emergency-contacts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .contact-card {
+            background: #f8fafc;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        .verification-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .edit-btn {
+            background: linear-gradient(135deg, #1976d2, #0d47a1);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .edit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+        }
+        
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                height: auto;
+                position: static;
+                display: none;
+            }
+            
+            .sidebar.active {
+                display: block;
+            }
+            
+            .hamburger {
+                display: block;
+            }
+
+            .nav-menu {
+                position: fixed;
+                left: -100%;
+                top: 60px;
+                flex-direction: column;
+                background-color: white;
+                width: 100%;
+                text-align: center;
+                transition: 0.3s;
+                box-shadow: 0 10px 27px rgba(0, 0, 0, 0.05);
+                padding: 1rem 0;
+            }
+
+            .nav-menu.active {
+                left: 0;
+            }
+
+            .nav-link {
+                margin: 0.5rem 0;
+                padding: 0.75rem;
+                display: block;
+            }
+            
+            .navbar {
+                padding: 0.4rem 0;
+                min-height: 55px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .emergency-contacts {
+                grid-template-columns: 1fr;
+            }
+            
+            .info-footer {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-animation">
+        <div class="floating-shape shape-1"></div>
+        <div class="floating-shape shape-2"></div>
+        <div class="floating-shape shape-3"></div>
+        <div class="floating-shape shape-4"></div>
+    </div>
+
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <nav class="navbar">
+                <div class="nav-brand">
+                    <h2>MediConnect</h2>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="index.php" class="nav-link">Home</a></li>
+                    <li><a href="about.php" class="nav-link">About</a></li>
+                    <li><a href="help.php" class="nav-link">Help</a></li>
+                    <li><a href="dashboard.php" class="nav-link active">Dashboard</a></li>
+                    <li><a href="logout.php" class="nav-link btn-primary">Logout</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Patient Dashboard</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-item">
+                    <a href="#dashboard" class="nav-link active">
+                        <i class="fas fa-chart-line"></i> Dashboard
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#appointments" class="nav-link">
+                        <i class="fas fa-calendar-alt"></i> Appointments
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#personal-info" class="nav-link">
+                        <i class="fas fa-user"></i> Personal Info
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#medical-history" class="nav-link">
+                        <i class="fas fa-hospital"></i> Medical History
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#current-treatment" class="nav-link">
+                        <i class="fas fa-pills"></i> Current Treatment
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#documents" class="nav-link">
+                        <i class="fas fa-file-medical"></i> Documents
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#medicines" class="nav-link">
+                        <i class="fas fa-capsules"></i> Medicines
+                    </a>
+                </div>
+            </nav>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <header class="header">
+                <div></div> <!-- Empty div for spacing -->
+                <div class="profile-dropdown">
+                    <button class="profile-btn">
+                        <div class="profile-img"><?php echo $initials; ?></div>
+                        <span><?php echo htmlspecialchars($full_name); ?></span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="dropdown-menu">
+                        <a href="editprofile.php" class="dropdown-item">
+                            <i class="fas fa-user-edit"></i> Edit Profile
+                        </a>
+                        <a href="settings.php" class="dropdown-item">
+                            <i class="fas fa-cog"></i> Settings
+                        </a>
+                        <a href="privacy.php" class="dropdown-item">
+                            <i class="fas fa-shield-alt"></i> Privacy
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="logout.php" class="dropdown-item">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </a>
+                    </div>
+                </div>
+            </header>
+            
+            <div class="content">
+                <!-- Dashboard Overview -->
+                <div id="dashboard" class="tab-content active">
+                    <h2 class="section-title">Welcome, <?php echo htmlspecialchars($user['first_name']); ?>!</h2>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Next Appointment</h3>
+                            <p>Tomorrow, 10:30 AM</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Active Prescriptions</h3>
+                            <p>3</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Recent Reports</h3>
+                            <p>5</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Health Status</h3>
+                            <p>Good</p>
+                        </div>
+                    </div>
+                    
+                    <h3 class="section-title">Recent Activity</h3>
+                    <table class="appointments-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Activity</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>2023-11-15</td>
+                                <td>Blood Test Results</td>
+                                <td>Lab Report</td>
+                                <td><span class="badge badge-success">Completed</span></td>
+                            </tr>
+                            <tr>
+                                <td>2023-11-10</td>
+                                <td>Dr. Smith Consultation</td>
+                                <td>Appointment</td>
+                                <td><span class="badge badge-success">Completed</span></td>
+                            </tr>
+                            <tr>
+                                <td>2023-11-05</td>
+                                <td>X-Ray Scan</td>
+                                <td>Diagnostic</td>
+                                <td><span class="badge badge-success">Completed</span></td>
+                            </tr>
+                            <tr>
+                                <td>2023-11-20</td>
+                                <td>Follow-up with Dr. Johnson</td>
+                                <td>Appointment</td>
+                                <td><span class="badge badge-warning">Upcoming</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Personal Information -->
+<div id="personal-info" class="tab-content">
+    <h2 class="section-title">Personal Information</h2>
+    <div class="info-card">
+        <div class="info-header">
+            <h3>Basic Details</h3>
+            <a href="edit-profile.php" class="edit-btn" style="text-decoration: none; display: inline-block;">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+        </div>
+        
+        <div class="info-grid">
+            <div class="info-group">
+                <label>First Name</label>
+                <p><?php echo htmlspecialchars($user['first_name']); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Last Name</label>
+                <p><?php echo htmlspecialchars($user['last_name']); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Email</label>
+                <p><?php echo htmlspecialchars($user['email']); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Phone</label>
+                <p><?php echo htmlspecialchars($user['phone']); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Date of Birth</label>
+                <p><?php echo htmlspecialchars($user['dob']); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Gender</label>
+                <p><?php echo ucfirst(htmlspecialchars($user['gender'])); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Blood Group</label>
+                <p><?php echo htmlspecialchars($user['blood_group'] ?: 'Not specified'); ?></p>
+            </div>
+            <div class="info-group">
+                <label>Address</label>
+                <p><?php echo htmlspecialchars($user['address']); ?></p>
+            </div>
+        </div>
+        
+        <div class="info-footer">
+            <p>Last updated: <?php echo date('d/m/Y', strtotime($user['updated_at'] ?? 'now')); ?></p>
+            <div class="verification-badge">
+                <i class="fas fa-check-circle" style="color: #388e3c;"></i>
+                <span>Information verified</span>
+            </div>
+        </div>
+    </div>
+</div>
+                        
+                        <div class="info-footer">
+                            <p>Last updated: <?php echo date('d/m/Y'); ?></p>
+                            <div class="verification-badge">
+                                <i class="fas fa-check-circle" style="color: #388e3c;"></i>
+                                <span>Information verified</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Other tab contents would go here... -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching functionality
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Remove active class from all links
+                document.querySelectorAll('.sidebar-nav .nav-link').forEach(el => {
+                    el.classList.remove('active');
+                });
+                
+                // Add active class to clicked link
+                this.classList.add('active');
+                
+                // Hide all tab contents
+                document.querySelectorAll('.tab-content').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                
+                // Show the selected tab content
+                const tabId = this.getAttribute('href');
+                document.querySelector(tabId).classList.add('active');
+            });
+        });
+        
+        // Profile dropdown toggle
+        const profileBtn = document.querySelector('.profile-btn');
+        const dropdownMenu = document.querySelector('.dropdown-menu');
+        
+        profileBtn.addEventListener('click', function() {
+            dropdownMenu.classList.toggle('show');
+        });
+        
+        // Close dropdown when clicking outside
+        window.addEventListener('click', function(e) {
+            if (!e.target.closest('.profile-dropdown')) {
+                dropdownMenu.classList.remove('show');
+            }
+        });
+        
+        // Mobile menu toggle
+        const hamburger = document.querySelector(".hamburger");
+        const navMenu = document.querySelector(".nav-menu");
+
+        if (hamburger && navMenu) {
+            hamburger.addEventListener("click", () => {
+                hamburger.classList.toggle("active");
+                navMenu.classList.toggle("active");
+            });
+
+            // Close mobile menu when clicking on a link
+            document.querySelectorAll(".nav-link").forEach(n => n.addEventListener("click", () => {
+                hamburger.classList.remove("active");
+                navMenu.classList.remove("active");
+            }));
+        }
+    </script>
+</body>
+</html>
